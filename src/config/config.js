@@ -3,14 +3,14 @@ module.exports = {
     username: 'services',
     password: 'password',
     database: 'blind',
-    host: 'postgres',
+    host: 'localhost',
     dialect: 'postgres'
   },
   prod: {
     username: 'services',
     password: 'password',
     database: 'blind',
-    host: 'postgres',
+    host: 'localhost',
     dialect: 'postgres'
   },
 }

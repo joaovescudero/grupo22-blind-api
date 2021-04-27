@@ -22,8 +22,8 @@ app.use(express.urlencoded({ extended: true }))
 app.use(cors())
 app.use(logger('dev'))
 
-// app.use(controllers.activity.default)
-// app.use(controllers.ocurrences.default)
+app.use(controllers.users.default)
+app.use(controllers.userResponsible.default)
 
 app.all('*', () => {
   throw new NotFoundError()

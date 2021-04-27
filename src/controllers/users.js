@@ -1,7 +1,8 @@
 import express from 'express'
-import { Sequelize, QueryTypes } from 'sequelize'
+import { Sequelize } from 'sequelize'
 import { checkSchema } from 'express-validator'
 import { validateRequest } from '../middlewares/validateRequest'
+import { UnprocessableEntityError } from '../errors/unprocessableEntityError'
 
 import UsersModel from '../models/users'
 
@@ -14,17 +15,15 @@ const router = express.Router()
  * @returns {Promise<void>}
  */
 const insert = async (req, res) => {
-  const Users = new UsersModel(req.db)
-  const body = req.body
-  const query = `
-    INSERT INTO occurrence(${Object.keys(body).join()}, created_at)
-    VALUES (${Object.keys(body).map((key) => `:${key}`).join()}, now())
-  `
-  await req.db.query(query, {
-    replacements: body,
-    type: QueryTypes.INSERT
-  })
-  res.status(201).send()
+  try {
+    const Users = new UsersModel(req.db)
+    const user = await Users.model.create(req.body)
+    res.status(201).send(user)
+  } catch (ex) {
+    if (ex.name === 'SequelizeUniqueConstraintError') {
+      throw new UnprocessableEntityError('Email already registered')
+    }
+  }
 }
 
 /**
@@ -35,15 +34,9 @@ const insert = async (req, res) => {
  */
 const getAll = async (req, res) => {
   const params = req.query
+  const Users = new UsersModel(req.db)
 
-  const query = `SELECT 
-     *
-  FROM occurrence ${Object.keys(params).length > 0 ? 'WHERE ' : ''}${Object.keys(params).map((key) => `${key} = :${key}`).join(' AND ')}`
-
-  const result = await req.db.query(query, {
-    replacements: params,
-    type: QueryTypes.SELECT
-  })
+  const result = await Users.model.findAll({ where: params })
   res.status(200).send(result)
 }
 
@@ -56,17 +49,10 @@ const getAll = async (req, res) => {
 const getOne = async (req, res) => {
   const { id } = req.params
 
-  const query = `SELECT 
-     *
-  FROM occurrence WHERE id = :id`
+  const Users = new UsersModel(req.db)
 
-  const result = await req.db.query(query, {
-    replacements: {
-      id: parseInt(id)
-    },
-    type: QueryTypes.SELECT
-  })
-  res.status(200).send(result.length > 0 ? result[0] : {})
+  const result = await Users.model.findByPk(parseInt(id))
+  res.status(200).send(result)
 }
 
 /**
@@ -78,15 +64,12 @@ const getOne = async (req, res) => {
 const deleteOne = async (req, res) => {
   const { id } = req.params
 
-  const query = 'DELETE FROM occurrence WHERE id = :id'
+  const Users = new UsersModel(req.db)
 
-  const result = await req.db.query(query, {
-    replacements: {
-      id: parseInt(id)
-    },
-    type: QueryTypes.SELECT
-  })
-  res.status(201).send(result.length > 0 ? result[0] : {})
+  const result = await Users.model.findByPk(parseInt(id))
+  await result.destroy()
+
+  res.status(201).send()
 }
 
 /**
@@ -99,194 +82,188 @@ const put = async (req, res) => {
   const { id } = req.params
   const body = req.body
 
-  const query = `UPDATE occurrence SET ${Object.keys(body).map((key) => `${key} = :${key}`).join()}, updated_at = now() WHERE id = :id`
-  console.log(query)
+  const Users = new UsersModel(req.db)
 
-  const result = await req.db.query(query, {
-    replacements: {
-      id: parseInt(id),
-      ...body
-    },
-    type: QueryTypes.SELECT
-  })
-  res.status(201).send(result.length > 0 ? result[0] : {})
+  const result = await Users.model.findByPk(parseInt(id))
+  await result.update(body)
+  res.status(201).send(result.dataValues)
 }
 
 router.post(
-  '/occurrences',
+  '/users',
   checkSchema({
-    ticketnumber: {
+    name: {
       in: ['body'],
-      errorMessage: 'ticketnumber must be a string',
+      errorMessage: 'name must be a string',
+      isString: true
+    },
+    email: {
+      in: ['body'],
+      errorMessage: 'email must be a string',
+      isString: true
+    },
+    password: {
+      in: ['body'],
+      errorMessage: 'password must be a string',
+      isString: true
+    },
+    document: {
+      in: ['body'],
+      errorMessage: 'document must be a string matching ^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$',
       isString: true,
+      matches: /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
     },
-    pjo_clientedaunidade: {
+    birthday: {
       in: ['body'],
-      errorMessage: 'pjo_clientedaunidade must be a number',
-      isNumeric: true,
+      errorMessage: 'birthday must be a date',
+      isDate: true
     },
-    pjo_empreendimentoid: {
+    mobile: {
       in: ['body'],
-      errorMessage: 'pjo_empreendimentoid must be a number',
-      isNumeric: true,
-    },
-    pjo_bloco: {
-      in: ['body'],
-      errorMessage: 'pjo_bloco must be a string',
+      errorMessage: 'mobile must be a string matching ^\(?\d{2}\)?\s?9?\s?\d{4}-?\d{4}$',
       isString: true,
+      matches: /^\(?\d{2}\)?\s?9?\s?\d{4}-?\d{4}$/
     },
-    pjo_unidade: {
+    is_enabled: {
       in: ['body'],
-      errorMessage: 'pjo_unidade must be a number',
-      isNumeric: true,
-    },
-    pjo_bandeira: {
-      in: ['body'],
-      errorMessage: 'pjo_bandeira must be a string',
-      isString: true,
-    },
-    description: {
-      in: ['body'],
-      errorMessage: 'description must be a string',
-      isString: true,
-    },
+      errorMessage: 'is_enabled must be a boolean',
+      isBoolean: true
+    }
   }),
   validateRequest,
   insert
 )
 
 router.get(
-  '/occurrences',
+  '/users',
   checkSchema({
     id: {
       in: ['query'],
       errorMessage: 'id must be a number',
-      optional: true,
       isNumeric: true,
+      optional: true
     },
-    ticketnumber: {
+    name: {
       in: ['query'],
-      errorMessage: 'ticketnumber must be a string',
+      errorMessage: 'name must be a string',
+      isString: true,
+      optional: true
+    },
+    email: {
+      in: ['query'],
+      errorMessage: 'email must be a string',
+      isString: true,
+      optional: true
+    },
+    document: {
+      in: ['query'],
+      errorMessage: 'document must be a string matching ^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$',
       isString: true,
       optional: true,
+      matches: /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/
     },
-    pjo_clientedaunidade: {
+    birthday: {
       in: ['query'],
-      errorMessage: 'pjo_clientedaunidade must be a number',
-      isNumeric: true,
-      optional: true,
+      errorMessage: 'birthday must be a date',
+      isDate: true,
+      optional: true
     },
-    pjo_empreendimentoid: {
+    mobile: {
       in: ['query'],
-      errorMessage: 'pjo_empreendimentoid must be a number',
-      isNumeric: true,
-      optional: true,
-    },
-    pjo_bloco: {
-      in: ['query'],
-      errorMessage: 'pjo_bloco must be a string',
+      errorMessage: 'mobile must be a string matching ^\(?\d{2}\)?\s?9?\s?\d{4}-?\d{4}$',
       isString: true,
       optional: true,
+      matches: /^\(?\d{2}\)?\s?9?\s?\d{4}-?\d{4}$/
     },
-    pjo_unidade: {
+    is_enabled: {
       in: ['query'],
-      errorMessage: 'pjo_unidade must be a number',
-      isNumeric: true,
-      optional: true,
-    },
-    pjo_bandeira: {
-      in: ['query'],
-      errorMessage: 'pjo_bandeira must be a string',
-      isString: true,
-      optional: true,
-    },
-    description: {
-      in: ['query'],
-      errorMessage: 'description must be a string',
-      isString: true,
-      optional: true,
-    },
+      errorMessage: 'is_enabled must be a boolean',
+      isBoolean: true,
+      optional: true
+    }
   }),
   validateRequest,
   getAll
 )
 
 router.get(
-  '/occurrences/:id',
+  '/users/:id',
   checkSchema({
     id: {
       in: ['params'],
       errorMessage: 'id must be a number',
-      isNumeric: true,
-    },
+      isNumeric: true
+    }
   }),
   validateRequest,
   getOne
 )
 
 router.delete(
-  '/occurrences/:id',
+  '/users/:id',
   checkSchema({
     id: {
       in: ['params'],
       errorMessage: 'id must be a number',
-      isNumeric: true,
-    },
+      isNumeric: true
+    }
   }),
   validateRequest,
   deleteOne
 )
 
 router.put(
-  '/occurrences/:id',
+  '/users/:id',
   checkSchema({
     id: {
       in: ['params'],
       errorMessage: 'id must be a number',
-      isNumeric: true,
+      isNumeric: true
     },
-    ticketnumber: {
+    name: {
       in: ['body'],
-      errorMessage: 'ticketnumber must be a string',
+      errorMessage: 'name must be a string',
       isString: true,
-      optional: true,
+      optional: true
     },
-    pjo_clientedaunidade: {
+    email: {
       in: ['body'],
-      errorMessage: 'pjo_clientedaunidade must be a number',
-      isNumeric: true,
-      optional: true,
-    },
-    pjo_empreendimentoid: {
-      in: ['body'],
-      errorMessage: 'pjo_empreendimentoid must be a number',
-      isNumeric: true,
-      optional: true,
-    },
-    pjo_bloco: {
-      in: ['body'],
-      errorMessage: 'pjo_bloco must be a string',
+      errorMessage: 'email must be a string',
       isString: true,
-      optional: true,
+      optional: true
     },
-    pjo_unidade: {
+    password: {
       in: ['body'],
-      errorMessage: 'pjo_unidade must be a number',
-      isNumeric: true,
-      optional: true,
-    },
-    pjo_bandeira: {
-      in: ['body'],
-      errorMessage: 'pjo_bandeira must be a string',
+      errorMessage: 'password must be a string',
       isString: true,
-      optional: true,
+      optional: true
     },
-    description: {
+    document: {
       in: ['body'],
-      errorMessage: 'description must be a string',
+      errorMessage: 'document must be a string matching ^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$',
       isString: true,
-      optional: true,
+      matches: /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/,
+      optional: true
     },
+    birthday: {
+      in: ['body'],
+      errorMessage: 'birthday must be a date',
+      isDate: true,
+      optional: true
+    },
+    mobile: {
+      in: ['body'],
+      errorMessage: 'mobile must be a string matching ^\(?\d{2}\)?\s?9?\s?\d{4}-?\d{4}$',
+      isString: true,
+      matches: /^\(?\d{2}\)?\s?9?\s?\d{4}-?\d{4}$/,
+      optional: true
+    },
+    is_enabled: {
+      in: ['body'],
+      errorMessage: 'is_enabled must be a boolean',
+      isBoolean: true,
+      optional: true
+    }
   }),
   validateRequest,
   put

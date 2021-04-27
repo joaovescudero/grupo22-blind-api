@@ -1,2 +1,2 @@
-// export * as activity from './activities'
-// export * as ocurrences from './ocurrences'
+export * as users from './users'
+export * as userResponsible from './user-responsibles'

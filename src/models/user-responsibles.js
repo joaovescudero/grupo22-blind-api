@@ -3,11 +3,12 @@ import UsersModel from './users'
 
 class UsersResponsibleModel {
   constructor (db) {
-    this.model = db.define('UserResponsible', {
+    this.model = db.define('user_responsible', {
       id: {
         type: DataTypes.INTEGER,
         allowNull: false,
         primaryKey: true,
+        autoIncrement: true,
         unique: true
       },
       name: {
@@ -44,7 +45,10 @@ class UsersResponsibleModel {
       createdAt: 'created_at',
       updatedAt: 'updated_at',
       deletedAt: 'deleted_at',
-      underscored: true
+      underscored: true,
+      schema: 'public',
+      paranoid: true,
+      freezeTableName: true
     });
 
     const Users = new UsersModel(db)
