@@ -50,6 +50,5 @@ create unique index user_responsible_id_uindex
 create index user_responsible_user_id_email_index
     on user_responsible (user_id, email);
 
-grant all on database blind to services;
-grant all on all sequences in schema blind.public to services;
-grant all on all tables in schema blind.public to services;
+grant all on all sequences in schema public to services;
+grant all on all tables in schema public to services;
